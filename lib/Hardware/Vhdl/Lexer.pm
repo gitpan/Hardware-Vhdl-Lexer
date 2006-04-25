@@ -6,8 +6,8 @@ Hardware::Vhdl::Lexer - Split VHDL code into lexical tokens
 
 =head1 SYNOPSIS
 
+    # Example 1: Just dump all the tokens in a VHDL file
     use Hardware::Vhdl::Lexer;
-    use Hardware::Vhdl::PreProcess;
     my $fh;
     open $fh, '<', 'device_behav.vhd' || die $!
     my $lexer = Hardware::Vhdl::Lexer->new(linesource => $fh);
@@ -16,7 +16,9 @@ Hardware::Vhdl::Lexer - Split VHDL code into lexical tokens
         print "# type = '$type' token='$token'\n";
     }
 
-    # use a class to supply the source code lines, and ask the lexer to remember the last 5 code tokens.
+    # Example 2: use a class (not shown) to supply the source code
+    #  lines, and ask the lexer to remember the last 5 code tokens.
+    use Hardware::Vhdl::PreProcess;
     my $lexer = Hardware::Vhdl::Lexer->new(
         linesource => Hardware::Vhdl::PreProcess->new(sourcefile => 'device_behav.vhd'),
         nhistory => 5
@@ -24,8 +26,8 @@ Hardware::Vhdl::Lexer - Split VHDL code into lexical tokens
 
 =head1 DESCRIPTION
 
-C<Hardware::Vhdl::Lexer> splits VHDL code into lexical tokens.  To use it, you need to first create a lexer object, passing in an
-object with a C<get_next_line> method which will supply lines of VHDL code to the lexer.  Repeated calls to the C<get_next_token> method of
+C<Hardware::Vhdl::Lexer> splits VHDL code into lexical tokens.  To use it, you need to first create a lexer object, passing in
+something which will supply lines of VHDL code to the lexer.  Repeated calls to the C<get_next_token> method of
 the lexer will then return VHDL tokens (in scalar context) or a token type code and the token (in list context).  C<get_next_token>
 returns undef when there are no more tokens to be read.
 
@@ -38,27 +40,47 @@ use Carp;
 use strict;
 use warnings;
 
-our $VERSION = "0.04";
+our $VERSION = "0.05";
 
 =head1 CONSTRUCTOR
 
+	new(linesource => <source> [, nhistory => N])
+
+The linesource argument is required: it defines where the VHDL source code will be taken from (see below).
+The optional nhistory argument sets 
+how many "code" tokens (see the C<get_next_token> method) will be remembered for access by the C<history> method.
+
 =over 4
 
-=item new(linesource => $object_with_get_next_line_method [, nhistory => N])
-
 =item new(linesource => $filehandle_reference [, nhistory => N])
+
+To read from a file, pass in the filehandle reference like this:
+
+    use Hardware::Vhdl::Lexer;
+    my $fh;
+    open $fh, '<', $filename || die $!
+    my $lexer = Hardware::Vhdl::Lexer->new(linesource => $fh);
 
 =item new(linesource => \@array_of_lines [, nhistory => N])
 
 =item new(linesource => \$scalar_containing_vhdl [, nhistory => N])
 
+To read VHDL source that is already in program memory, the linesource argument can be a reference to either an array of lines
+or a single string which can have embedded newlines.
+
+=item new(linesource => $object_with_get_next_line_method [, nhistory => N])
+
+The linesource argument can be an object with a C<get_next_line> method.  
+This method must return undef when there are no more lines to read.
+
 =item new(linesource => \&subroutine_that_returns_lines [, nhistory => N])
 
-The linesource argument is required: it can be either an object with a C<get_next_line> method, or a filehandle reference, in which case C<readline> will
-be used on it.  The linesource is expected to return undef when there are no more lines to read.  The optional nhistory argument sets 
-how many "code" tokens (see below) will be remembered for access by the C<history> method.
+If none of the above input methods suits your needs, you can give a subroutine reference and wrap whatever code you
+need to get the VHDL source.  When called, this subroutine must return each line of source code in turn, and then return
+undef when there are no more lines.
 
 =back
+
 =cut
 
 sub new {
@@ -88,10 +110,11 @@ sub new {
         my $sourcetype = ref $self->{linesource};
         if ($sourcetype eq 'GLOB') { $self->{source_func} = sub { readline($self->{linesource}) } }
         elsif ($sourcetype eq 'ARRAY') { my $i=0; $self->{source_func} = sub { $self->{linesource}[$i++] } }
-        elsif ($sourcetype eq 'SCALAR') { my $i=0; $self->{source_func} = sub { $i++ == 0 ? $self->{linesource} : undef } }
-        elsif ($sourcetype eq 'SUB') { $self->{source_func} = $self->{linesource} }
-        elsif ($sourcetype && eval { "$sourcetype->can('get_net_line')" } ) { $self->{source_func} = sub { $self->{linesource}->get_next_line } }
-        else { croak "${class}->new 'linesource' parameter is not of a valid type" }
+        elsif ($sourcetype eq 'SCALAR') { my $i=0; $self->{source_func} = sub { $i++ == 0 ? ${$self->{linesource}} : undef } }
+        elsif ($sourcetype eq 'CODE') { $self->{source_func} = $self->{linesource} }
+        elsif ($sourcetype && $sourcetype ne 'REF' && eval { "$sourcetype->can('get_net_line')" } ) { $self->{source_func} = sub { $self->{linesource}->get_next_line } }
+        elsif ($sourcetype eq '') { croak "${class}->new 'linesource' parameter is not of a valid type (it is not a reference)" }
+        else { croak "${class}->new 'linesource' parameter is not of a valid type (type is '$sourcetype')" }
     }
     
     # set up initial history values
@@ -111,11 +134,6 @@ Returns the linesource argument passed into the constructor
 =cut
 
 sub linesource { $_[0]->{linesource} }
-
-# sourcefile, linenum and files_used methods are deprecated: call methods of $lexer->linesource instead
-#sub sourcefile { $_[0]->{linesource}->sourcefile }
-#sub linenum { $_[0]->{linesource}->linenum }
-#sub files_used { $_[0]->{linesource}->files_used }
 
 =item C<get_next_token()>
 
@@ -318,8 +336,6 @@ L<http://rt.cpan.org/NoAuth/Bugs.html?Dist=Hardware-Vhdl-Lexer>
 L<http://search.cpan.org/dist/Hardware-Vhdl-Lexer>
 
 =back
-
-=head1 ACKNOWLEDGEMENTS
 
 =head1 COPYRIGHT & LICENSE
 

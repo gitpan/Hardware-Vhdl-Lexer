@@ -112,6 +112,14 @@ if (1) {
     &check_splitting([ ['GENERIC', 'ci'], ['(', 'cp'], [' ', 'ws'], ["\015\012", 'wn'], ['    ', 'ws'], ['ADR_WID', 'ci'] ], "whitespace then newline", 'class');
 }
 
+if (1) {
+    diag("code source type tests:");
+    for my $sourcetype (qw/class fileglob arrayref subref scalarref/) { #
+	&check_splitting(['abc',' ','<=','  ','afunc','(','t',',',"'0'",')',';',' ','-- a comment',"\015\012",
+	    'def',':=','"string with \\" quotes in"'], "token splitting from $sourcetype", $sourcetype);
+    }
+}
+
 ok( 1, 'End of tests' );
 
 sub string_to_file {
@@ -126,22 +134,45 @@ sub string_to_file {
 sub check_splitting {
     my ($tokens, $testname, $sourcetype) = @_;
     my @correct_tokens = @$tokens;
-    my $tp;
     
+    # initialise source object
+    my $source;    
     if ($sourcetype eq 'class') {
-        my $linegiver = LineGiver->new;
-        for my $ti (@correct_tokens) {
-            $linegiver->addtokens(ref $ti eq 'ARRAY' ? $ti->[0] : $ti);
-        }
-        $tp = Hardware::Vhdl::Lexer->new(linesource => $linegiver);
+        $source = LineGiver->new;
+    } elsif ($sourcetype eq 'fileglob' || $sourcetype eq 'scalarref') {
+        $source = '';
+    } elsif ($sourcetype eq 'arrayref' || $sourcetype eq 'subref') {
+	$source = [];
     } else {
-        my $source;
-        for my $ti (@correct_tokens) {
-            $source .= ref $ti eq 'ARRAY' ? $ti->[0] : $ti;
-        }
-        my $fh = &string_to_file($source);
-        $tp = Hardware::Vhdl::Lexer->new(linesource => $fh);
+	die "source type '$sourcetype' not recognised";
     }
+    
+    # add tokens to source object
+    for my $ti (@correct_tokens) {
+        my $token = ref $ti eq 'ARRAY' ? $ti->[0] : $ti;
+	if ($sourcetype eq 'class') {
+            $source->addtokens($token);
+        } elsif ($sourcetype eq 'fileglob' || $sourcetype eq 'scalarref') {
+            $source .= $token;
+        } elsif ($sourcetype eq 'arrayref' || $sourcetype eq 'subref') {
+            push @$source, $token;
+        } else {
+	    die "source type '$sourcetype' not recognised";
+	}
+    }
+    
+    # complete the source object
+    if ($sourcetype eq 'fileglob') {
+        $source = &string_to_file($source);
+    } elsif ($sourcetype eq 'subref') {
+        my $sourcearray = $source;
+	$source = sub { shift @$sourcearray }
+    } elsif ($sourcetype eq 'scalarref') {
+	$source = \"$source";
+    }
+    
+    # construct the lexer
+    my $tp = Hardware::Vhdl::Lexer->new(linesource => $source);
     
     push @correct_tokens, undef;
     my @got_tokens;

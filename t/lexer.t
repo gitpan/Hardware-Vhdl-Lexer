@@ -1,5 +1,5 @@
 
-use Test::More qw/no_plan/;
+use Test::More tests => 77;
 use File::Temp qw/tempfile/;
 #use YAML;
 
@@ -57,7 +57,7 @@ if (1) {
             my $n = $i + 1;
             like($e, qr/^more \($n\) history requested than has been stored \($nhist\)/,  "history test 0 item $i")
         }
-        
+
         is(scalar $tp->get_next_token, 'foo', 'get_next_token 1');
         is($tp->history(0), 'foo', "history test 1 item 0");
         for $i (1..$nhist-1) {
@@ -69,7 +69,7 @@ if (1) {
             my $n = $i + 1;
             like($e, qr/^more \($n\) history requested than has been stored \($nhist\)/,  "history test 1 item $i")
         }
-        
+
         is(scalar $tp->get_next_token, ' ', 'get_next_token 2');
         is($tp->history(0), 'foo', "history test 2 item 0");
         is($tp->history(1), '', "history test 2 item 0");
@@ -89,7 +89,7 @@ if (1) {
     &check_splitting(['report','"RD\\\\"', ';'], "string 3", 'class');
     &check_splitting(['report','"RD\\\\\\\\"', ' '], "string 4", 'class');
     &check_splitting(['abc',' ','<=','  ','afunc','(','t',',',"'0'",')',';',' ','-- a comment',"\015\012",
-        'def',':=','"string with \\" quotes in"'], "token splitting 1", 'class');
+            'def',':=','"string with \\" quotes in"'], "token splitting 1", 'class');
     &check_splitting(['def','<=','\\$%^&*()\\','&','\\_dFe{}\\'], "extended identifiers", 'class');
     &check_splitting(['def','<=','"string with \015\012 newline in"'], "string with newline in", 'class');
     &check_splitting(['def','<=','"string with \015\012 several \015\012 newlines in"'], "string with newlines in", 'class');
@@ -97,26 +97,53 @@ if (1) {
     &check_splitting(['def','<=','"unterminated \\" string '], "unterminated string 2", 'class');
     &check_splitting(['abc',"\015\012",'abc',"\015\012","\015\012",'abc',"\015",'def',"\012",'ghi',"\012\015",'jkl'], "newlines", 'class');
     &check_splitting([
-        'abc',':=','1_000.31',';',
-        'abc',':=','1_000.E6',';',
-        'abc',':=','-1_000.31E-6',';',
-        'abc',':=','2#11_0101#',';',
-        'abc',':=','8#12_3457#',';',
-        'abc',':=','16#AB_5AFD#',';',
+            'abc',':=','1_000.31',';',
+            'abc',':=','1_000.E6',';',
+            'abc',':=','-1_000.31E-6',';',
+            'abc',':=','2#11_0101#',';',
+            'abc',':=','8#12_3457#',';',
+            'abc',':=','16#AB_5AFD#',';',
         ], "numeric literals", 'class');
     &check_splitting([
-        'abc',':=','X"AA55"',';',
-        'abc',':=','O"353"',';',
-        'abc',':=','B"11_0101"',';',
+            'abc',':=','X"AA55"',';',
+            'abc',':=','O"353"',';',
+            'abc',':=','B"11_0101"',';',
         ], "bit_vector literals", 'class');
     &check_splitting([ ['GENERIC', 'ci'], ['(', 'cp'], [' ', 'ws'], ["\015\012", 'wn'], ['    ', 'ws'], ['ADR_WID', 'ci'] ], "whitespace then newline", 'class');
+    &check_splitting([
+        ["report", 'ci'],
+        ["'('", 'cc'],
+        ["&", 'cp'],
+        ["'a'", 'cc'],
+        ["&", 'cp'],
+        ["')'",  'cc'],
+    ], "character literals 1", 'class');
+    &check_splitting([
+        ["for", 'ci'],
+        [" ", 'ws'],
+        ["std_logic", 'ci'],
+        ["'", 'cp'],
+        ["(", 'cp'],
+        ["'0'", 'cc'],
+        [")", 'cp'],
+        [" ", 'ws'],
+        ["to", 'ci'],
+        [" ", 'ws'],
+        ["std_logic", 'ci'],
+        ["'", 'cp'],
+        ["(", 'cp'],
+        ["'1'", 'cc'],
+        [")", 'cp'],
+        [" ", 'ws'],
+        ["loop", 'ci'],
+    ], "character literals 2", 'class');
 }
 
 if (1) {
     diag("code source type tests:");
     for my $sourcetype (qw/class fileglob arrayref subref scalarref/) { #
-	&check_splitting(['abc',' ','<=','  ','afunc','(','t',',',"'0'",')',';',' ','-- a comment',"\015\012",
-	    'def',':=','"string with \\" quotes in"'], "token splitting from $sourcetype", $sourcetype);
+        &check_splitting(['abc',' ','<=','  ','afunc','(','t',',',"'0'",')',';',' ','-- a comment',"\015\012",
+                'def',':=','"string with \\" quotes in"'], "token splitting from $sourcetype", $sourcetype);
     }
 }
 
@@ -134,46 +161,46 @@ sub string_to_file {
 sub check_splitting {
     my ($tokens, $testname, $sourcetype) = @_;
     my @correct_tokens = @$tokens;
-    
+
     # initialise source object
-    my $source;    
+    my $source;
     if ($sourcetype eq 'class') {
         $source = LineGiver->new;
     } elsif ($sourcetype eq 'fileglob' || $sourcetype eq 'scalarref') {
         $source = '';
     } elsif ($sourcetype eq 'arrayref' || $sourcetype eq 'subref') {
-	$source = [];
+        $source = [];
     } else {
-	die "source type '$sourcetype' not recognised";
+        die "source type '$sourcetype' not recognised";
     }
-    
+
     # add tokens to source object
     for my $ti (@correct_tokens) {
         my $token = ref $ti eq 'ARRAY' ? $ti->[0] : $ti;
-	if ($sourcetype eq 'class') {
+        if ($sourcetype eq 'class') {
             $source->addtokens($token);
         } elsif ($sourcetype eq 'fileglob' || $sourcetype eq 'scalarref') {
             $source .= $token;
         } elsif ($sourcetype eq 'arrayref' || $sourcetype eq 'subref') {
             push @$source, $token;
         } else {
-	    die "source type '$sourcetype' not recognised";
-	}
+            die "source type '$sourcetype' not recognised";
+        }
     }
-    
+
     # complete the source object
     if ($sourcetype eq 'fileglob') {
         $source = &string_to_file($source);
     } elsif ($sourcetype eq 'subref') {
         my $sourcearray = $source;
-	$source = sub { shift @$sourcearray }
+        $source = sub { shift @$sourcearray }
     } elsif ($sourcetype eq 'scalarref') {
-	$source = \"$source";
+        $source = \"$source";
     }
-    
+
     # construct the lexer
     my $tp = Hardware::Vhdl::Lexer->new(linesource => $source);
-    
+
     push @correct_tokens, undef;
     my @got_tokens;
     while (@got_tokens < @correct_tokens) {

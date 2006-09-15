@@ -1,6 +1,7 @@
 
-use Test::More tests => 77;
-use File::Temp qw/tempfile/;
+use Test::More tests => 101;
+use File::Temp qw/ tempfile /;
+use Scalar::Util qw/ refaddr /;
 #use YAML;
 
 # TODO:
@@ -45,7 +46,7 @@ if (1) {
     for my $nhist (4, 6) {
         diag("history tests with nhistory=$nhist");
         my $fh = &string_to_file("foo bar baz");
-        my $tp = Hardware::Vhdl::Lexer->new(linesource => $fh, nhistory => $nhist);
+        my $tp = Hardware::Vhdl::Lexer->new({ linesource => $fh, nhistory => $nhist });
         isa_ok( $tp, 'Hardware::Vhdl::Lexer', "new Hardware::Vhdl::Lexer" );
         my $i;
         for $i (0..$nhist-1) {
@@ -147,6 +148,42 @@ if (1) {
     }
 }
 
+for my $legal_punc (q {|}, q{&}, q{'}, q{(}, q{)}, q{*}, q{**}, q{+},
+        q{,}, q{-}, q{.}, q{/}, q{/=}, q{:}, q{:=}, q{;}, q{<}, q{<=}, 
+        q{<>}, q{=}, q{=>}, q{>}, q{>=}, ) {
+    &check_splitting([
+        ["aaaa", 'ci'],
+        [" ", 'ws'],
+        [$legal_punc, 'cp'],
+        [" ", 'ws'],
+        ["aaaa", 'ci'],
+    ], "VHDL-93 punctuation: ".$legal_punc, 'class');
+}
+
+&check_splitting([
+    ["aaaa", 'ci'],
+    [" ", 'ws'],
+    [q{¬}, 'cu'],
+    [q{`}, 'cu'],
+    [q{¦}, 'cu'],
+    [q{[}, 'cu'],
+    [q{]}, 'cu'],
+    [q{!}, 'cu'],
+    [q{£}, 'cu'],
+    [q{$}, 'cu'],
+    [q{€}, 'cu'],
+    [q{%}, 'cu'],
+    [q{^}, 'cu'],
+    [q{@}, 'cu'],
+    [q{~}, 'cu'],
+    [q{?}, 'cu'],
+    [" ", 'ws'],
+    ["aaaa", 'ci'],
+], "VHDL-93 illegal characters", 'class');
+
+for my $vhdl93_keyword (qw/ abs access after alias all and architecture array assert attribute b begin block body buffer bus case component configuration constant disconnect downto e else elsif end end block end for ; entity exit file for function generate generic group guarded if impure in inertial inout is label library linkage literal loop map mod nand new next nor not null o of on open or others out package port postponed procedure process pure record register reject rem report return rol ror select severity shared signal sla sll sra srl subtype then to transport type unaffected units until use variable wait when while with x xnor xor /) {
+}
+
 ok( 1, 'End of tests' );
 
 sub string_to_file {
@@ -199,7 +236,7 @@ sub check_splitting {
     }
 
     # construct the lexer
-    my $tp = Hardware::Vhdl::Lexer->new(linesource => $source);
+    my $tp = Hardware::Vhdl::Lexer->new({ linesource => $source });
 
     push @correct_tokens, undef;
     my @got_tokens;
@@ -215,4 +252,5 @@ sub check_splitting {
     #    print "got:".Dump(\@got_tokens);
     #}
     is_deeply(\@got_tokens, \@correct_tokens, $testname);
+    #is(refaddr($source), refaddr($tp->get_linesource), "get_linesource, type=$sourcetype");
 }
